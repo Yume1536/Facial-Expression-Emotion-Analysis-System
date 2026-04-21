@@ -1,43 +1,40 @@
 import os
-import numpy as np
+from pathlib import Path
+
 import cv2
-from tensorflow.keras.models import load_model
-from sklearn.metrics import classification_report, confusion_matrix
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
-import shutil
+from sklearn.metrics import classification_report, confusion_matrix
+from tensorflow.keras.models import load_model
 
-# -----------------------------
-# Paths and settings
-# -----------------------------
-MODEL_PATH = r"C:\Facial_Emotion_Recognition\outputs\models\CNNModel_fer_3emo.h5"
-TEST_DIR = r"C:\Facial_Emotion_Recognition\inputs\fer"  # <-- change if different
-OUTPUT_DIR = r"C:\Facial_Emotion_Recognition\outputs\confusion_matrix"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-EMOTIONS = ['Angry', 'Happy', 'Surprise']
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_PATH = Path(os.getenv("FER_MODEL_PATH", BASE_DIR / "outputs" / "models" / "CNNModel_fer_3emo.h5"))
+TEST_DIR = Path(os.getenv("FER_TEST_DIR", BASE_DIR / "inputs" / "fer"))
+OUTPUT_DIR = Path(os.getenv("FER_OUTPUT_DIR", BASE_DIR / "outputs" / "confusion_matrix"))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# -----------------------------
-# Load the trained model
-# -----------------------------
+EMOTIONS = ["Angry", "Happy", "Surprise"]
+
+if not MODEL_PATH.exists():
+    raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
+if not TEST_DIR.exists():
+    raise FileNotFoundError(f"Dataset directory not found: {TEST_DIR}")
+
 print("Loading model...")
-model = load_model(MODEL_PATH, compile=False)
+model = load_model(str(MODEL_PATH), compile=False)
 
-# -----------------------------
-# Load test images
-# -----------------------------
 print("Loading test data...")
-X_test = []
-y_test = []
-
+X_test, y_test = [], []
 for idx, emotion in enumerate(EMOTIONS):
-    folder = os.path.join(TEST_DIR, emotion)
-    if not os.path.exists(folder):
-        print(f"Warning: Folder not found - {folder}")
+    folder = TEST_DIR / emotion
+    if not folder.exists():
+        print(f"Warning: folder not found - {folder}")
         continue
-    for img_file in os.listdir(folder):
-        img_path = os.path.join(folder, img_file)
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+
+    for img_file in folder.iterdir():
+        img = cv2.imread(str(img_file), cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
         img = cv2.resize(img, (48, 48))
@@ -45,45 +42,26 @@ for idx, emotion in enumerate(EMOTIONS):
         X_test.append(img)
         y_test.append(idx)
 
+if not X_test:
+    raise ValueError("No test images were loaded. Check FER_TEST_DIR and class folders.")
+
 X_test = np.expand_dims(np.array(X_test), -1)
 y_test = np.array(y_test)
-
 print(f"Loaded {len(X_test)} test samples")
 
-# -----------------------------
-# Evaluate model
-# -----------------------------
 print("Evaluating model...")
 y_pred = np.argmax(model.predict(X_test), axis=1)
-
-print("\nClassification Report:")
 report = classification_report(y_test, y_pred, target_names=EMOTIONS)
+print("\nClassification Report:")
 print(report)
 
 cm = confusion_matrix(y_test, y_pred)
-
-# -----------------------------
-# Save confusion matrix plot
-# -----------------------------
 plt.figure(figsize=(6, 5))
-sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-            xticklabels=EMOTIONS, yticklabels=EMOTIONS)
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=EMOTIONS, yticklabels=EMOTIONS)
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.title("Confusion Matrix")
-cm_path = os.path.join(OUTPUT_DIR, "conf_matrix.png")
+cm_path = OUTPUT_DIR / "conf_matrix.png"
 plt.savefig(cm_path)
+plt.close()
 print(f"\nConfusion matrix saved to {cm_path}")
-try:
-    print("\n✅ Testing completed successfully!")
-except UnicodeEncodeError:
-    print("\nTesting completed successfully!")
-
-# Path to the confusion matrix image
-conf_matrix_path = r"C:\Facial_Emotion_Recognition\outputs\confusion_matrix\conf_matrix.png"
-
-# Copy to static folder so Flask can display it
-dashboard_image_path = r"C:\Facial_Emotion_Recognition\static\conf_matrix.png"
-shutil.copy(conf_matrix_path, dashboard_image_path)
-
-
