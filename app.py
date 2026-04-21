@@ -8,6 +8,7 @@ from tensorflow.keras.models import load_model
 import subprocess
 import sqlite3
 import json
+import sys
 
 # -----------------------------
 # Flask Configuration
@@ -184,8 +185,8 @@ def confusion_matrix(filename):
 @app.route('/test', methods=['POST'])
 def test_model():
     try:
-        python_exe = r"C:\Facial_Emotion_Recognition\venv\Scripts\python.exe"
-        test_script = os.path.join(os.getcwd(), "test_model.py")
+        python_exe = sys.executable
+        test_script = os.path.join(os.path.dirname(__file__), "test_model.py")
 
         process = subprocess.Popen([python_exe, test_script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         output = "".join(process.stdout.readlines())
